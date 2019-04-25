@@ -1,0 +1,2 @@
+v 3
+d Command to run randomizations and check baseline balance. Automatically handles clustering and block stratification.
