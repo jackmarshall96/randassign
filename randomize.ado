@@ -13,7 +13,7 @@ program define randomize, rclass
 	****************************************/
 	
 	* Define syntax.
-	syntax , gen(string) groups(string asis) PROBabilities(numlist) [cluster(varname)] [block(varname)] [balance(varlist)] ///
+	syntax [if/], gen(string) groups(string asis) PROBabilities(numlist) [cluster(varname)] [block(varname)] [balance(varlist)] ///
 		[seed(numlist max=1 integer)] [overrule]
 		
 	* Parse group names.
@@ -112,6 +112,11 @@ program define randomize, rclass
 		qui exit
 	}
 	
+	* Limit the sample to only selected observations.
+	if `"`if'"' != "" {
+		qui keep if `if'
+	}
+	
 	* Collapse the data to the cluster level.
 	collapse (first) `block' `balance', by(`cluster')
 		
@@ -182,6 +187,11 @@ program define randomize, rclass
 	sort `roworder'
 	order `colorder'
 	
+	* Update treatment variable to missing if outside of if/in.
+	if `"`if'"' != "" {
+		replace `gen' = . if !(`if')
+	}
+	
 	/***************************************
 	Balance checks.
 	****************************************/
@@ -227,6 +237,7 @@ program define randomize, rclass
 		matrix p_1 = J(`rows', `num_groups' - 1, .1)
 		local tests = `rows' * (`num_groups' - 1)
 
+		
 		mata: pvals = st_matrix("pvals")
 		mata: p_01 = st_matrix("p_01")
 		mata: p_05 = st_matrix("p_05")
@@ -284,6 +295,7 @@ program define randomize, rclass
 end
 
 * Program to randomly assign treatment statuses to each group.
+cap program drop order_treatments
 program define order_treatments
 
 	/* Define 2 arguements.
