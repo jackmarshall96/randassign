@@ -1,3 +1,4 @@
+cap program drop randomize
 program define randomize, rclass
 		
 	* Main steps:
@@ -13,20 +14,37 @@ program define randomize, rclass
 	****************************************/
 	
 	* Define syntax.
-	syntax [if/], gen(string) groups(string asis) PROBabilities(numlist) [cluster(varname)] [block(varname)] [balance(varlist)] ///
-		[seed(numlist max=1 integer)] [overrule]
-		
+	syntax [if/], GENerate(string) PROBabilities(numlist) [LABels(string asis)] [STRings(string asis)] [cluster(varname)] [block(varname)] [balance(varlist)] ///
+		[seed(numlist max=1 integer)] [overrule] [countfrom(numlist integer max=1)] [values(numlist)]
+
+	
 	* Parse group names.
-	local remaining = `"`groups'"'
+	cap assert `"`labels'"' == "" | `"`strings'"' == ""
+	if _rc != 0 {
+		di as error "Cannot specify both labels and strings."
+		qui exit
+	}
+	
+	if `"`strings'"' != "" {
+		local labels = `"`strings'"'
+	}
+	local remaining = `"`labels'"'
 	local counter = 1
 	while strlen(`"`remaining'"') > 0 {
-		gettoken group`counter' remaining: remaining, parse(",")
+		gettoken label`counter' remaining: remaining, parse(",")
 		if substr(`"`remaining'"', 1, 1) == "," {
 			local remaining = substr(`"`remaining'"', 2, strlen(`"`remaining'"') - 1)
 		}
 		local counter = `++counter'
 	}
 	local num_groups = `counter' - 1
+
+	* Check that strings and values are not both specified.
+	cap assert `"`strings'"' == "" | `"`values'"' == ""
+	if _rc != 0 {
+		di as error "Cannot specify both strings and values."
+		qui exit
+	}
 	
 	* Parse probabilities.
 	local counter = 1
@@ -46,10 +64,15 @@ program define randomize, rclass
 	}
 	
 	* Check that there are the same number of groups and probabilities.
-	cap assert `num_groups' == `counter' - 1
-	if _rc != 0 {
-		di as error "Must specify the same number of groups and probabilities."
-		exit
+	if `"`labels'"' != "" | `"`strings'"' != "" {
+		cap assert `num_groups' == `counter' - 1
+		if _rc != 0 {
+			di as error "Must specify the same number of groups and probabilities."
+			exit
+		}
+	}
+	else {
+		local num_groups = `counter' - 1
 	}
 	
 	* Scale probabilities to integers.
@@ -67,7 +90,38 @@ program define randomize, rclass
 	local sum = subinstr("`new_probs'", ",", " +", .)
 	local total = `sum'
 	
-
+	* Check that values and countfrom are not both specified.
+	cap assert `"`values'"' == "" | `"`countfrom'"' == ""
+	if _rc != 0 {
+		di as error "Cannot specify both values and countfrom."
+	}
+	
+	* Update countfrom to 0 if it is missing (default, but added here to allow previous step).
+	if `"`countfrom'"' == "" {
+		local countfrom = 0
+	}
+	
+	* Check that the number of values is correct.
+	if `"`values'"' != "" {
+		local num_values: word count `values'
+		cap assert `num_values' == `num_groups'
+		if _rc != 0 {
+			di as error "Cannot specify different numbers of probabilities and values."
+			qui exit
+		}
+		
+	}
+	
+	* Fill in values if it is missing.
+	else if `"`values'"' == "" {
+		local counter = `countfrom'
+		forvalues i = 1/`num_groups' {
+			local values `values' `counter++'
+		}
+	}
+	
+	
+	
 	/***************************************
 	Prepare data for randomization.
 	****************************************/
@@ -162,34 +216,57 @@ program define randomize, rclass
 	qui order_treatments `total' `block' `++seed' `temp1' `temp2'
 
 	* Combine treatments together based on probabilities.
-	qui gen `gen' = .
-	local counter = 0
+	qui gen `generate' = .
+	local counter = 1
 	foreach p in `new_probs' {
-		qui replace `gen' = `counter' if `temp2' <= `p'
+		local value: word `counter' of `values'
+		qui replace `generate' = `value' if `temp2' <= `p'
 		qui replace `temp2' = . if `temp2' <= `p'
 		qui replace `temp2' = `temp2' - `p'
 		
 		local counter = `++counter'
 	}
 	
-	* Label values of treatment variable.
-	local lab_command = "lab def `gen'_lab "
-	forvalues i = 1/`num_groups' {
-		local val = `i' - 1
-		local lab_command = `"`lab_command' `val' `"`group`i''"'"'
+
+	* Convert to string values if string() is specified.
+
+	if `"`strings'"' != "" {
+		qui rename `generate' `generate'_old
+		qui gen `generate' = ""
+		local counter = 1
+		foreach i in `values' {
+			local str = `"`label`counter++''"'
+			qui replace `generate' = `"`str'"' if `generate'_old == `i'
+		}
+		qui drop `generate'_old
 	}
-	`lab_command'
-	lab val `gen' `gen'_lab
+	
+
+	* Label values of treatment variable.
+	else if `"`labels'"' != "" {
+		local counter = 1
+		local tool replace
+		foreach i in `values' {
+			lab def `generate' `i' `"`label`counter++''"', `tool'
+			local tool add
+		}
+		lab val `generate' `generate'
+	}
+	
+	
 	
 	* Restore the data to the original.
-	keep `gen' `cluster'
+	keep `generate' `cluster'
 	qui merge 1:m `cluster' using `whole', nogen
 	sort `roworder'
 	order `colorder'
 	
 	* Update treatment variable to missing if outside of if/in.
 	if `"`if'"' != "" {
-		replace `gen' = . if !(`if')
+		cap replace `generate' = . if !(`if')
+		if _rc != 0 {
+			cap replace `generate' = "" if !(`if')
+		}
 	}
 	
 	/***************************************
@@ -207,14 +284,14 @@ program define randomize, rclass
 		local comparisons = `num_groups' - 1
 		foreach v of varlist `balance' {
 	
-			qui areg `v' i.`gen', absorb(`block') cluster(`cluster')
+			qui areg `v' i.`generate', absorb(`block') cluster(`cluster')
 			
 			forvalues i = 0/`comparisons' {
 			
-				qui sum `v' if `gen' == `i'
+				qui sum `v' if `generate' == `i'
 				matrix estimates[`r', `i' + 1] = `r(mean)'
 				if `i' > 0 {
-					qui test `i'.`gen' = 0
+					qui test `i'.`generate' = 0
 					matrix pvals[`r', `i'] = `r(p)'
 				}
 			}
@@ -273,8 +350,8 @@ program define randomize, rclass
 	di ""
 	di as result "Randomization results:"
 	di ""
-	di as result" - Variable `gen' generated:"
-	tab `gen'
+	di as result" - Variable `generate' generated:"
+	tab `generate'
 	di ""
 	di as result " - Base seed used for randomization : `seed'"
 	di ""
