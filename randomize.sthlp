@@ -133,6 +133,10 @@ Randomize women into treatment or control, stratifying on college graduation. Ch
 Randomize treated women to receive various incentives.
 {phang}{cmd: randomize if treatment == 1, gen(incentive) prob(.2 .2 .2 .2 .2) values(10 20 30 40 50)}{p_end}
 
+{title:Installation}
+
+You can download the most recent version from github:
+{phang}{cmd: net install randomize, from (https://raw.githubusercontent.com/johndentmarshall/randomize/master/)}
 
 {title:Author}
 
