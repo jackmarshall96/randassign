@@ -19,9 +19,9 @@
 
 {p 8 17 2}
 {cmdab:randomize}
+[{bf:if} {it:exp}]
 {cmd:,}
 {opth gen:erate(newvar)}
-{opth groups(string)}
 {opth prob:abilities(numlist)}
 [{it:options}]
 
@@ -30,12 +30,20 @@
 {synoptline}
 {syntab:Main}
 {synopt:{opth gen:erate(newvar)}}specify name of treatment status variable{p_end}
-{synopt:{opth groups(string)}}names of treatmet arms, seperated by commas{p_end}
-{synopt:{opth blocks(varname)}}blocks for stratified randomization{p_end}
-{synopt: {opth cluster(varname)}}cluster variable for clustered randomization{p_end}
-{synopt: {opth seed(integer)}}specify randomization seed{p_end}
-{synopt: {opt randomseed}}automatically set seed{p_end}
-{synopt: {opth balance(varlist)}}specify varlist to check randomization balance
+{synopt:{opth prob:abilities(numlist)}}specify allocation fractions for each group{p_end}
+
+{syntab:Randomization details}
+{synopt:{opth block(varname)}}blocks for stratified randomization{p_end}
+{synopt: {opth clus:ter(varname)}}cluster variable for clustered randomization{p_end}
+{synopt: {opt seed(integer)}}specify randomization seed{p_end}
+{synopt: {opt overrule}}allow blocks without all treatment statuses{p_end}
+
+{syntab:Output and formatting}
+{synopt:{opth lab:els(string)}}names of treatmet arms, to be used as value labels, seperated by commas{p_end}
+{synopt:{opth str:ings(string)}}names of treatmet arms, to be used as string values, seperated by commas{p_end}
+{synopt:{opt countf:rom(integer)}}specify numeric value for first treatment group, default is 0{p_end}
+{synopt:{opth val:ues(numlist)}}specify values for each treatment group in ordered list{p_end}
+{synopt: {opth bal:ance(varlist)}}specify varlist to check randomization balance{p_end}
 
 {synoptline}
 {p2colreset}{...}
@@ -46,9 +54,10 @@
 {title:Description}
 
 {pstd}
-{cmd:randomize} randomizes the sample into groups specified in {opt groups}, with allocation fractions
+{cmd:randomize} randomizes the sample into groups, with allocation fractions
 spedified by {opt probabilities}. It will perform clustered randomizations specified in {opt cluster}, 
-and also can perform stratified randomizations within specified {opt blocks}.
+and also can perform stratified randomizations within specified {opt block}. If {opt balance} is specified,
+it will perform balance checks on specified variables.
 
 
 {marker options}{...}
@@ -57,46 +66,76 @@ and also can perform stratified randomizations within specified {opt blocks}.
 {dlgtab:Main}
 
 {phang}
-{opth generate(newvar)} generates a new variable {newvar} with the treatment statuses.
+{opth gen:erate(newvar)} generates a new variable {newvar} with the treatment statuses.
 
 {phang}
-{opth groups(string)} will ranomize the sample into the specified groups. Group names should
-be seperated by commas. If {opt balance} is specified, comparisons will be against the first
-group specified here.
+{opth prob:abilities(numlist)} specifies the relative sizes of each treatment arm. For example, 
+for two groups of equal size, specify prob(.5 .5). If probabilities do not add up to 1, the command
+will display a warning message and use relative sizes. Therefore prob(.5 .5) and prob(1 1) will give the same result.
+
+{dlgtab: Randomization details}
 
 {phang}
-{opth probabilities(numlist)} specifies the relative sizes of each treatment arm. Order must
-correspond with {opt groups}. For example, for two groups of equal size, specify prob(.5 .5).
+{opth block(varname)} specifies a variable to be used as a block variable for stratification. Randomization will be
+performed only within each level specified. If you specify blocks small enough that some levels will not have all treatment
+statuses, you will get an error. To allow blocks without all treatment statuses, specify {opt overrule}. If you do not specify
+this option, the randomization will not be stratified.
 
 {phang}
-{opth cluster(varname)} specifies a variable within which to cluster randomization. Each unique level
+{opth clus:ter(varname)} specifies a variable within which to cluster randomization. Each unique level
 of this variable will be randomized together. If you specify {opt cluster} and {opt blocks}, all
-observations in each cluster must have the same values of the block variable.
+observations in each cluster must have the same values of the block variable. If you do not specify this option,
+randomization will not be clustered.
 
 {phang}
-{opth seed(integer)} specifies the seed for the randomization.
-values.
+{opt seed(integer)} specifies the seed for the randomization. If you do not specify a seed, one is selected based on the
+time the command was executed (to the second), and displayed in the output to replicate your results later.
 
 {phang}
-{opt randomseed} selects a seed based on the exact time of the randomization. This seed is displayed
-in the output so that the randomization can be replicated. This cannot be combined with {opt seed}. If
-you do not specify {opt seed} or {opt randomseed}, the program uses the previously set seed, or allows
-Stata to select at random.
+{opt overrule} allows randomization blocks without all treatment statuses.
+
+{dlgtab:Ouptut and formatting}
 
 {phang}
-{opth balance(varlist)} produces a balance table for differences across groups within randomization
+{opt lab:els(string)} specifies value labels for each level of the treatment status, in the order of {opt probabilities}. Labels
+should be seperated by commas. If you specify this option, there must be the same number of labels as treatment groups.
+
+{phang}
+{opt str:ings(string)} functions the same as labels, except that it results in a string output variable in stead of a labeled numeric.
+
+{phang}
+{opt countf:rom} specifies the value for the first treatment status, counting up by 1 for subsequent groups, in the order that they
+are listed in {opt probabilities}. The default is 0.
+
+{phang}
+{opth val:ues(numlist)} specifies values for each treatment in order. For example, if you specify prob(.25 .75) val(50 100), for approximately
+25% of the observations, the treatment variable will take on value 50, and for the remaining observations it will take value 100. You cannot
+specify both this option and {opt countfrom}.
+
+{phang}
+{opth bal:ance(varlist)} produces a balance table for differences across groups within randomization
 blocks on specified variables. Also, it displays binomial probabilities of seeing the observed number
-of rejected null hypotheses if all tests were independent.
+of rejected null hypotheses if all tests were independent. Comparisons will be relative to the first group
+listed in {opt: probabilities}, so it makes sense to list a control group first if you will specify the balance option. Note
+that re-randomizing is generally not a best-practice, so this option should be used with caution.
 
 
 
 {marker examples}{...}
 {title:Examples}
 
+Load the data. Extract from 1988 U.S. National Longitudinal Study of Young Women.
+{phang}{cmd: sysuse nlsw88, clear}{p_end}
 
-{phang}{cmd:. sysuse auto, clear}{p_end}
+Randomize women into treatment or control, stratifying on college graduation. Check balance on age, race, and marital status.
+{phang}{cmd: randomize, gen(treatment) prob(.25 .75) labels(Control, Treatment) block(collegegrad) balance(age race married)}{p_end}
 
-{phang}{cmd:. randomize, gen(treatment) groups(Treatment, Control) prob(.5 .5) blocks(foreign)}{p_end}
+Randomize treated women to receive various incentives.
+{phang}{cmd: randomize if treatment == 1, gen(incentive) prob(.2 .2 .2 .2 .2) values(10 20 30 40 50)}{p_end}
 
-{phang}{cmd:. randomize, gen(treatment2) groups(A, B, C) prob(.5, .25, .25) cluster(rep78)}{p_end}
 
+{title:Author}
+
+	John Marshall
+	Precision Agriculture for Development
+	jmarshall@precisionag.org
