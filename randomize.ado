@@ -1,4 +1,3 @@
-cap program drop randomize
 program define randomize, rclass
 		
 	* Main steps:
@@ -141,16 +140,17 @@ program define randomize, rclass
 		qui gen `cluster' = `roworder'
 	}
 	
-	* Save long format data in a tempfile.
-	tempfile whole
-	qui save `whole'
-	
-	* Define blocks.
+	* If there is no block, make a tempvar to allow for balance checks to work properly later.
 	if `"`block'"' == "" {
 		tempvar block
 		qui gen `block' = 1
 	}
 	
+	* Save long format data in a tempfile.
+	tempfile whole
+	qui save `whole'
+	
+	* Allow for string block variables.
 	cap confirm numeric variable `block'
 	if _rc != 0 {
 		local block_orig `block'
@@ -253,8 +253,7 @@ program define randomize, rclass
 		lab val `generate' `generate'
 	}
 	
-	
-	
+
 	* Restore the data to the original.
 	keep `generate' `cluster'
 	qui merge 1:m `cluster' using `whole', nogen
@@ -283,7 +282,7 @@ program define randomize, rclass
 		local r = 1
 		local comparisons = `num_groups' - 1
 		foreach v of varlist `balance' {
-	
+			
 			qui areg `v' i.`generate', absorb(`block') cluster(`cluster')
 			
 			forvalues i = 0/`comparisons' {
@@ -372,7 +371,6 @@ program define randomize, rclass
 end
 
 * Program to randomly assign treatment statuses to each group.
-cap program drop order_treatments
 program define order_treatments
 
 	/* Define 2 arguements.
