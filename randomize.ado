@@ -119,8 +119,6 @@ program define randomize, rclass
 		}
 	}
 	
-	
-	
 	/***************************************
 	Prepare data for randomization.
 	****************************************/
@@ -298,13 +296,20 @@ program define randomize, rclass
 			local r = `++r'
 		}
 		forvalues i = 1/`comparisons' {
-			local colnames = `"`colnames' "P-val. (`++i') = (1)""'
+			local colnames = `"`colnames' "pval (`++i')=(1)""'
 		}
 		
 		* Format matrix
+		if `"`labels'"' == "" {
+			local counter = 1
+			foreach i in `values' {
+				local word: word `counter++' of `values'
+				local labels "`labels' `generate'=`i'"
+			}
+		}
 		matrix balance = estimates, pvals
 		local groupnames = subinstr("`groups'", ",", "", .)
-		matrix colnames balance = `groupnames' `colnames'
+		matrix colnames balance = `labels' `colnames'
 		matrix rownames balance = `balance'
 		
 		* Calculate binomial probabilities.
