@@ -368,6 +368,7 @@ program define randomize, rclass
 		di as result "       Pr(k >= `num_l_05') at the 5% level: `p_l_05'"
 		di as result "       Pr(k >= `num_l_01') at the 1% level: `p_l_01'"
 		
+		return scalar seed = `seed'
 		return scalar p01 = `p_l_01'
 		return scalar p05 = `p_l_05'
 		return scalar p10 = `p_l_1'
