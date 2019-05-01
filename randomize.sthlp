@@ -136,10 +136,25 @@ Randomize treated women to receive various incentives.
 {title:Installation}
 
 You can download the most recent version from github:
-{phang}{cmd: net install randomize, from (https://raw.githubusercontent.com/johndentmarshall/randomize/master/)}
+{phang}{cmd: net install randomize, from(https://raw.githubusercontent.com/johndentmarshall/randomize/master/) replace}
+
+{title:Stored results}
+
+{bf: randomize} stored the following results in {bf:r():}
+
+	Scalars
+		{bf:r(seed)}		seed used for the randomization
+		{bf:r(p10)} 		probability of finding k or greater tests significant at 10% level (if {bf:balance} specified)
+		{bf:r(p05)} 		probability of finding k or greater tests significant at 5% level (if {bf:balance} specified)
+		{bf:r(p01)} 		probability of finding k or greater tests significant at 1% level (if {bf:balance} specified)
+		
+		where k is the observed number of rejected null hypotheses at a given level.
+		
+	Matrices
+		{bf:r(balance)}		balance table (if {bf:balance} specified)
+
 
 {title:Author}
-
 	John Marshall
 	Precision Agriculture for Development
 	jmarshall@precisionag.org
