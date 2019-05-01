@@ -39,8 +39,8 @@
 {synopt: {opt overrule}}allow blocks without all treatment statuses{p_end}
 
 {syntab:Output and formatting}
-{synopt:{opth lab:els(string)}}names of treatmet arms, to be used as value labels, seperated by commas{p_end}
-{synopt:{opth str:ings(string)}}names of treatmet arms, to be used as string values, seperated by commas{p_end}
+{synopt:{opt lab:els(string)}}names of treatmet arms, to be used as value labels, seperated by commas{p_end}
+{synopt:{opt str:ings(string)}}names of treatmet arms, to be used as string values, seperated by commas{p_end}
 {synopt:{opt countf:rom(integer)}}specify numeric value for first treatment group, default is 0{p_end}
 {synopt:{opth val:ues(numlist)}}specify values for each treatment group in ordered list{p_end}
 
@@ -74,7 +74,7 @@ baseline balance checks.
 {phang}
 {opth prob:abilities(numlist)} specifies the relative sizes of each treatment arm. For example, 
 for two groups of equal size, specify prob(.5 .5). If probabilities do not add up to 1, the command
-will display a warning message and use relative sizes. Therefore prob(.5 .5) and prob(1 1) will give the same result.
+will display a warning message and use relative sizes. Therefore, prob(.5 .5) and prob(1 1) will give the same result.
 
 {dlgtab: Randomization details}
 
@@ -143,7 +143,7 @@ Load the data. Extract from 1988 U.S. National Longitudinal Study of Young Women
 {phang}{cmd: sysuse nlsw88, clear}{p_end}
 
 Randomize women into treatment or control, stratifying on college graduation. Check balance on age, race, and marital status.
-{phang}{cmd: randomize, gen(treatment) prob(.25 .75) labels(Control, Treatment) block(collegegrad) balance(age race married)}{p_end}
+{phang}{cmd: randomize, gen(treatment) prob(.25 .75) labels(Control, Treatment) block(collgrad) balance(age race married)}{p_end}
 
 Randomize treated women to receive various incentives.
 {phang}{cmd: randomize if treatment == 1, gen(incentive) prob(.2 .2 .2 .2 .2) values(10 20 30 40 50)}{p_end}
