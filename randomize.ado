@@ -13,9 +13,9 @@ program define randomize, rclass
 	****************************************/
 	
 	* Define syntax.
-	syntax [if/], GENerate(string) PROBabilities(numlist) [LABels(string asis)] [STRings(string asis)] [cluster(varname)] [block(varname)] [balance(varlist)] ///
-		[seed(numlist max=1 integer)] [overrule] [countfrom(numlist integer max=1)] [values(numlist)]
-
+	syntax [if/], GENerate(string) PROBabilities(numlist) [LABels(string asis)] [STRings(string asis)] [CLUSter(varname)] [block(varname)] ///
+		[seed(numlist max=1 integer)] [overrule] [COUNTFrom(numlist integer max=1)] [VALues(numlist)] [BALCluster(varlist numeric)] ///
+		[BALIndiv(varlist numeric)]
 	
 	* Parse group names.
 	cap assert `"`labels'"' == "" | `"`strings'"' == ""
@@ -119,6 +119,28 @@ program define randomize, rclass
 		}
 	}
 	
+	* Cannot specify balcluster without cluster.
+	cap assert "`cluster'" != "" | "`balcluster'" == ""
+	if _rc != 0 {
+		di as error "Cannot specify balcluster without cluster."
+		qui exit
+	}
+	
+	* Cannot have overlapping variables in balindiv and balcluster.
+	if "`balcluster'" != "" & "`balindiv'" != "" {
+		local words: word count `balcluster'
+		forvalues i = 1/`words' {
+			local word: word `i' of `balcluster'
+			cap assert strpos(" `balindiv' ", " `word' ") == 0
+			if _rc != 0 {
+				di as error "Cannot have the same variable in balcluster and balindiv."
+				qui exit
+			}
+		}
+	}
+	
+	local specified_cluster = ("`cluster'" != "")
+	
 	/***************************************
 	Prepare data for randomization.
 	****************************************/
@@ -130,8 +152,7 @@ program define randomize, rclass
 	local colorder = "`r(varlist)'"
 	
 	
-	/* Collapse by clustervar. If no clustervar is specified,
-	cluster is defined as one cluster for each individual, which
+	/* If no clustervar is specified, cluster is defined as one cluster for each individual, which
 	is equivalent to individual-level randomization. */
 	if `"`cluster'"' == "" {
 		tempvar cluster
@@ -196,7 +217,7 @@ program define randomize, rclass
 	
 	* Set seed and generate random variables.
 	if `"`seed'"' == "" {
-		local seed = subinstr("`c(current_time)'", ":", "", .)
+		local seed = runiformint(10000, 99999)
 	}
 	
 	tempvar rand1 rand2
@@ -269,8 +290,44 @@ program define randomize, rclass
 	/***************************************
 	Balance checks.
 	****************************************/
-	if "`balance'" != "" {
+	if "`balcluster'" != "" {
 	
+		tempvar tag
+		qui egen tag = tag(`cluster')
+		foreach v of varlist `balcluster' {
+		
+			* Check that it is actually a group-level variable.
+			tempvar `v'_mean
+			qui bysort `cluster': egen ``v'_mean' = mean(`v')
+			cap assert `v' == ``v'_mean'
+			if _rc != 0 & `specified_cluster' == 0 {
+				di as error "`v' is not consistent within cluster variable. If you want to include it, use balanceindividual."
+				qui exit
+			}
+			
+			* Create a version with only 1 non-missing observation per cluster.
+			tempvar `v'_tag
+			qui gen ``v'_tag' = `v' if tag
+			local balluster_tag `balcluster_tag' ``v'_tag'
+		}
+	}
+	
+	if "`balindiv'" != "" & `specified_cluster' {
+		foreach v of varlist `balindiv' {
+			tempvar `v'_mean
+			qui bysort `cluster': egen ``v'_mean' = mean(`v')
+			cap assert `v' == ``v'_mean'
+			if _rc == 0 {
+				di as error "WARNING: `v' has the same levels within all clusters. Did you mean to include it in balancecluster?"
+			}
+		}
+	}
+	
+	if "`balcluster'" != "" | "`balindiv'" != "" {
+		
+		* Combine varlist.
+		local balance `balindiv' `balcluster_tag'
+		
 		* Prepare matrix.
 		local rows: word count `balance'
 		matrix define estimates = J(`rows', `num_groups', .)
@@ -278,23 +335,26 @@ program define randomize, rclass
 		
 		* Estimate differences between groups.
 		local r = 1
-		local comparisons = `num_groups' - 1
 		foreach v of varlist `balance' {
 			
 			qui areg `v' i.`generate', absorb(`block') cluster(`cluster')
 			
-			forvalues i = 0/`comparisons' {
-			
+			local c = 1
+			foreach i in `values' {
 				qui sum `v' if `generate' == `i'
-				matrix estimates[`r', `i' + 1] = `r(mean)'
-				if `i' > 0 {
+				matrix estimates[`r', `c'] = `r(mean)'
+				if `c' > 1 {
 					qui test `i'.`generate' = 0
-					matrix pvals[`r', `i'] = `r(p)'
+					matrix pvals[`r', `c' - 1] = `r(p)'
 				}
+				
+				local c = `++c'
 			}
 			
 			local r = `++r'
 		}
+		
+		local comparisons = `num_groups' - 1
 		forvalues i = 1/`comparisons' {
 			local colnames = `"`colnames' "pval (`++i')=(1)""'
 		}
