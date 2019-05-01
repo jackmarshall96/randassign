@@ -92,7 +92,7 @@ randomization will not be clustered.
 
 {phang}
 {opt seed(integer)} specifies the seed for the randomization. If you do not specify a seed, one is randomly selected 
-and displayed in the output to replicate your results later.
+and returned as a stored value to be accessed later.
 
 {phang}
 {opt overrule} allows randomization blocks without all treatment statuses.
@@ -159,14 +159,14 @@ You can download the most recent version from github:
 
 	Scalars
 		{bf:r(seed)}		seed used for the randomization
-		{bf:r(p10)} 		probability of finding k or greater tests significant at 10% level (if {bf:balance} specified)
-		{bf:r(p05)} 		probability of finding k or greater tests significant at 5% level (if {bf:balance} specified)
-		{bf:r(p01)} 		probability of finding k or greater tests significant at 1% level (if {bf:balance} specified)
+		{bf:r(p10)} 		probability of finding k or greater tests significant at 10% level in balance checks
+		{bf:r(p05)} 		probability of finding k or greater tests significant at 5% level in balance checks
+		{bf:r(p01)} 		probability of finding k or greater tests significant at 1% level in balance checks
 		
 		where k is the observed number of rejected null hypotheses at a given level.
 		
 	Matrices
-		{bf:r(balance)}		balance table (if {bf:balance} specified)
+		{bf:r(balance)}		balance table
 
 
 {title:Author}
