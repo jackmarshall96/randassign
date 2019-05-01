@@ -43,7 +43,10 @@
 {synopt:{opth str:ings(string)}}names of treatmet arms, to be used as string values, seperated by commas{p_end}
 {synopt:{opt countf:rom(integer)}}specify numeric value for first treatment group, default is 0{p_end}
 {synopt:{opth val:ues(numlist)}}specify values for each treatment group in ordered list{p_end}
-{synopt: {opth bal:ance(varlist)}}specify varlist to check randomization balance{p_end}
+
+{syntab:Balance}
+{synopt: {opth bali:ndiv(varlist)}}specify individual-level varaibles on which check randomization balance{p_end}
+{synopt: {opth balc:luster(varlist)}}specify cluster-level variables on which to check randomization balance{p_end}
 
 {synoptline}
 {p2colreset}{...}
@@ -56,8 +59,8 @@
 {pstd}
 {cmd:randomize} randomizes the sample into groups, with allocation fractions
 spedified by {opt probabilities}. It will perform clustered randomizations specified in {opt cluster}, 
-and also can perform stratified randomizations within specified {opt block}. If {opt balance} is specified,
-it will perform balance checks on specified variables.
+and also can perform stratified randomizations within levels of {opt block}. The command can also perform
+baseline balance checks.
 
 
 {marker options}{...}
@@ -88,8 +91,8 @@ observations in each cluster must have the same values of the block variable. If
 randomization will not be clustered.
 
 {phang}
-{opt seed(integer)} specifies the seed for the randomization. If you do not specify a seed, one is selected based on the
-time the command was executed (to the second), and displayed in the output to replicate your results later.
+{opt seed(integer)} specifies the seed for the randomization. If you do not specify a seed, one is randomly selected 
+and displayed in the output to replicate your results later.
 
 {phang}
 {opt overrule} allows randomization blocks without all treatment statuses.
@@ -112,12 +115,24 @@ are listed in {opt probabilities}. The default is 0.
 25% of the observations, the treatment variable will take on value 50, and for the remaining observations it will take value 100. You cannot
 specify both this option and {opt countfrom}.
 
+{dlgtab:Balance}
+
 {phang}
-{opth bal:ance(varlist)} produces a balance table for differences across groups within randomization
+{opth bali:ndiv(varlist)} produces a balance table for differences across groups within randomization
 blocks on specified variables. Also, it displays binomial probabilities of seeing the observed number
 of rejected null hypotheses if all tests were independent. Comparisons will be relative to the first group
-listed in {opt: probabilities}, so it makes sense to list a control group first if you will specify the balance option. Note
-that re-randomizing is generally not a best-practice, so this option should be used with caution.
+listed in {opt probabilities}, so it makes sense to list a control group first if you will specify the balance option. 
+This option should not be used for cluster-level variables; see {opt balc:luster}.
+
+{phang}
+{opth balc:luster(varlist)} functions the same way as {opt bali:ndiv}, but is used for cluster-level variables. You
+may want to check balance on variables that are necessarily the same across clusters, such as the cluster size, etc. In this case,
+you want to compare only one observation per cluster across experimental groups. Specifying {opt balc:luster} is the equivalent to
+specifying {opt bali:ndiv} on a variable with only 1 non-missing observation per cluster, which you can also do manually. You can 
+only specify this option with {opt cluster}.
+
+{phang}
+Note that re-randomizing is generally not a best practice, so these options should be used with caution.
 
 
 
