@@ -143,7 +143,7 @@ Load the data. Extract from 1988 U.S. National Longitudinal Study of Young Women
 {phang}{cmd: sysuse nlsw88, clear}{p_end}
 
 Randomize women into treatment or control, stratifying on college graduation. Check balance on age, race, and marital status.
-{phang}{cmd: randomize, gen(treatment) prob(.25 .75) labels(Control, Treatment) block(collgrad) balance(age race married)}{p_end}
+{phang}{cmd: randomize, gen(treatment) prob(.25 .75) labels(Control, Treatment) block(collgrad) balindiv(age race married)}{p_end}
 
 Randomize treated women to receive various incentives.
 {phang}{cmd: randomize if treatment == 1, gen(incentive) prob(.2 .2 .2 .2 .2) values(10 20 30 40 50)}{p_end}
