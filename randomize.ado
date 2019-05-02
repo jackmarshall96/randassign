@@ -13,7 +13,7 @@ program define randomize, rclass
 	****************************************/
 	
 	* Define syntax.
-	syntax [if/], GENerate(string) PROBabilities(numlist) [LABels(string asis)] [STRings(string asis)] [CLUSter(varname)] [block(varname)] ///
+	syntax [if/], GENerate(string) PROBabilities(numlist min=2) [LABels(string asis)] [STRings(string asis)] [CLUSter(varname)] [block(varname)] ///
 		[seed(numlist max=1 integer)] [overrule] [COUNTFrom(numlist integer max=1)] [VALues(numlist)] [BALCluster(varlist numeric)] ///
 		[BALIndiv(varlist numeric)]
 	
@@ -21,7 +21,7 @@ program define randomize, rclass
 	cap assert `"`labels'"' == "" | `"`strings'"' == ""
 	if _rc != 0 {
 		di as error "Cannot specify both labels and strings."
-		qui exit
+		exit 198
 	}
 	
 	if `"`strings'"' != "" {
@@ -42,7 +42,7 @@ program define randomize, rclass
 	cap assert `"`strings'"' == "" | `"`values'"' == ""
 	if _rc != 0 {
 		di as error "Cannot specify both strings and values."
-		qui exit
+		exit 198
 	}
 	
 	* Parse probabilities.
@@ -67,7 +67,7 @@ program define randomize, rclass
 		cap assert `num_groups' == `counter' - 1
 		if _rc != 0 {
 			di as error "Must specify the same number of groups and probabilities."
-			exit
+			exit 198
 		}
 	}
 	else {
@@ -93,6 +93,7 @@ program define randomize, rclass
 	cap assert `"`values'"' == "" | `"`countfrom'"' == ""
 	if _rc != 0 {
 		di as error "Cannot specify both values and countfrom."
+		exit 198
 	}
 	
 	* Update countfrom to 0 if it is missing (default, but added here to allow previous step).
@@ -106,7 +107,7 @@ program define randomize, rclass
 		cap assert `num_values' == `num_groups'
 		if _rc != 0 {
 			di as error "Cannot specify different numbers of probabilities and values."
-			qui exit
+			exit 198
 		}
 		
 	}
@@ -123,7 +124,7 @@ program define randomize, rclass
 	cap assert "`cluster'" != "" | "`balcluster'" == ""
 	if _rc != 0 {
 		di as error "Cannot specify balcluster without cluster."
-		qui exit
+		exit 198
 	}
 	
 	* Cannot have overlapping variables in balindiv and balcluster.
@@ -134,7 +135,7 @@ program define randomize, rclass
 			cap assert strpos(" `balindiv' ", " `word' ") == 0
 			if _rc != 0 {
 				di as error "Cannot have the same variable in balcluster and balindiv."
-				qui exit
+				exit 198
 			}
 		}
 	}
@@ -178,11 +179,12 @@ program define randomize, rclass
 	}
 	
 	* Make sure that blocks are constant witin clusters.
-	qui bysort `cluster': egen test = sd(`block')
-	cap assert test == 0 | test == .
+	tempvar test
+	qui bysort `cluster': egen `test' = sd(`block')
+	cap assert `test' == 0 | `test' == .
 	if _rc != 0 {
 		di as error "Block variable must be constant within clusters."
-		qui exit
+		exit 459
 	}
 	
 	* Limit the sample to only selected observations.
@@ -195,14 +197,15 @@ program define randomize, rclass
 		
 	* Check that there are enough clusters per block.
 	preserve
-		gen temp = 1
-		bysort `block': egen clusters = sum(temp)
-		drop temp
+		tempvar temp
+		gen `temp' = 1
+		bysort `block': egen clusters = sum(`temp')
+		drop `temp'
 		
 		cap assert clusters >= `sum'
 		if _rc != 0 & `"`overrule'"' == "" {
 			di as error "The stratification blocks are too small to randomize all treatments. Adjust blocks or specify overrule WITH CAUTION."
-			qui exit
+			exit 459
 		}
 		else if `"`overrule'"' != "" {
 			di as error "WARNING: You have specified stratification blocks that are too small."
@@ -274,7 +277,7 @@ program define randomize, rclass
 	
 
 	* Restore the data to the original.
-	keep `generate' `cluster'
+	keep `generate' `cluster' `block'
 	qui merge 1:m `cluster' using `whole', nogen
 	sort `roworder'
 	order `colorder'
@@ -293,7 +296,7 @@ program define randomize, rclass
 	if "`balcluster'" != "" {
 	
 		tempvar tag
-		qui egen tag = tag(`cluster')
+		qui egen `tag' = tag(`cluster')
 		foreach v of varlist `balcluster' {
 		
 			* Check that it is actually a group-level variable.
@@ -302,13 +305,13 @@ program define randomize, rclass
 			cap assert `v' == ``v'_mean'
 			if _rc != 0 & `specified_cluster' == 0 {
 				di as error "`v' is not consistent within cluster variable. If you want to include it, use balanceindividual."
-				qui exit
+				exit 459
 			}
 			
 			* Create a version with only 1 non-missing observation per cluster.
 			tempvar `v'_tag
-			qui gen ``v'_tag' = `v' if tag
-			local balluster_tag `balcluster_tag' ``v'_tag'
+			qui gen ``v'_tag' = `v' if `tag'
+			local balcluster_tag `balcluster_tag' ``v'_tag'
 		}
 	}
 	
@@ -370,7 +373,7 @@ program define randomize, rclass
 		matrix balance = estimates, pvals
 		local groupnames = subinstr("`groups'", ",", "", .)
 		matrix colnames balance = `labels' `colnames'
-		matrix rownames balance = `balance'
+		matrix rownames balance = `balindiv' `balcluster'
 		
 		* Calculate binomial probabilities.
 		matrix p_01 = J(`rows', `num_groups' - 1, .01)
@@ -469,12 +472,13 @@ program define order_treatments
 	
 		/* Select the next number in levels by dividing the random number into
 		equally sized groups. */
-		gen quadrant = ceil(`random' * `var'/`permutations')
-		gen next = word(`levels', quadrant)
-		replace `order' = `order' + " " + next
+		tempvar quadrant next
+		gen `quadrant' = ceil(`random' * `var'/`permutations')
+		gen `next' = word(`levels', `quadrant')
+		replace `order' = `order' + " " + `next'
 		
 		* Remove selected groups from levels so that they are not selected twice.
-		replace `levels' = subinstr(`levels', next, "", .)
+		replace `levels' = subinstr(`levels', `next', "", .)
 		
 		/* Update randomization variable and number of permutations for the next round.
 		Effectively, we are "zooming in" on the portion of the random number. */
@@ -483,18 +487,19 @@ program define order_treatments
 		local permutations = `permutations'/`var'
 		
 		* Drop temporary variables so they can be redifined in the next iteration.
-		drop quadrant next
+		drop `quadrant' `next'
 		
 	}
 	
 	* Generate a new variable with the ordered treatments.
 		gen `newvar' = .
 		forvalues i = 1/`total' {
-			gen temp = word(`order', `i')
-			destring temp, replace
-			replace `newvar' = `i' if `oldvar' == temp
+			tempvar temp
+			gen `temp' = word(`order', `i')
+			destring `temp', replace
+			replace `newvar' = `i' if `oldvar' == `temp'
 			
-			drop temp
+			drop `temp'
 		}
 	
 end
