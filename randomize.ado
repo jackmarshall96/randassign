@@ -17,6 +17,57 @@ program define randomize, rclass
 		[seed(numlist max=1 integer)] [overrule] [COUNTFrom(numlist integer max=1)] [VALues(numlist)] [BALCluster(varlist numeric)] ///
 		[BALIndiv(varlist numeric)]
 	
+	
+	
+	/* Parse probabilities. To do this, we will scale all probabilities up to integers.
+	This will take the following main steps. 
+		- Parse local into different versions for each operation (space, comma, and + seperated).
+		- Logical checks (probs add to 1, correct number of groups).
+		- Find the smallest probability.
+		- Multiply all probabilities by the minimum, so the smallest is 1.
+		- Iterate through each probability and check prob % 1. If this is not 0.
+			then scale all probabilities up by (1/(prob % 1). */
+	
+	* Parse into different versions.
+	local counter = 1
+	foreach p in `probabilities' {
+		local prob`counter' = `p'
+		local commas "`commas', `prob`counter''"
+		local counter = `++counter'
+	}
+	local commas = substr("`commas'", 3, strlen("`commas'") - 2)
+	local pluses = subinstr("`commas'", ",", "+", .)
+
+	* Logical checks - probabilities should add to 1. Otherwise, display warning.
+	local probsum = `pluses'
+	cap assert `probsum' == 1
+	if _rc != 0 {
+		di as error "WARNING: Probabilities do not add up to 1. Relative sizes will be used."
+	}
+	
+	* Calculate minimum and scale probabilities so that the smallest number is 1.
+	local min = min(`commas')
+	local num_groups: word count `probabilities'
+	forvalues i = 1/`num_groups' {
+		local prob`i' = `prob`i'' * (1/`min')
+	}
+	
+	* Iterate through probabilities, scaling by mod.
+	forvalues i = 1/`num_groups' {
+		if mod(`prob`i'', 1) != 0 {
+			local multiplier = 1/mod(`prob`i'', 1)
+			forvalues j = 1/`num_groups' {
+				local prob`j' = `prob`j'' * `multiplier'
+			}
+		}
+	}
+	
+	* Calculate the total of the scaled probabilities.
+	local total = 0
+	forvalues i = 1/`num_groups' {
+		local total = `total' + `prob`i''
+	}
+	
 	* Parse group names.
 	cap assert `"`labels'"' == "" | `"`strings'"' == ""
 	if _rc != 0 {
@@ -27,68 +78,30 @@ program define randomize, rclass
 	if `"`strings'"' != "" {
 		local labels = `"`strings'"'
 	}
-	local remaining = `"`labels'"'
-	local counter = 1
-	while strlen(`"`remaining'"') > 0 {
-		gettoken label`counter' remaining: remaining, parse(",")
-		if substr(`"`remaining'"', 1, 1) == "," {
-			local remaining = substr(`"`remaining'"', 2, strlen(`"`remaining'"') - 1)
+	
+	if `"`labels'"' != "" {
+		local remaining = `"`labels'"'
+		local counter = 1
+		while strlen(`"`remaining'"') > 0 {
+			gettoken label`counter' remaining: remaining, parse(",")
+			if substr(`"`remaining'"', 1, 1) == "," {
+				local remaining = substr(`"`remaining'"', 2, strlen(`"`remaining'"') - 1)
+			}
+			local counter = `++counter'
 		}
-		local counter = `++counter'
-	}
-	local num_groups = `counter' - 1
-
-	* Check that strings and values are not both specified.
-	cap assert `"`strings'"' == "" | `"`values'"' == ""
-	if _rc != 0 {
-		di as error "Cannot specify both strings and values."
-		exit 198
-	}
-	
-	* Parse probabilities.
-	local counter = 1
-	foreach p in `probabilities' {
-		local prob`counter' = `p'
-		local new_probs "`new_probs', `prob`counter''"
-		local counter = `++counter'
-	}
-	local new_probs = substr("`new_probs'", 3, strlen("`new_probs'") - 2)
-	
-	* Check that probabilities add up to 1.
-	local probsum = subinstr("`new_probs'", ",", "+", .)
-	local probsum = `probsum'
-	cap assert `probsum' == 1
-	if _rc != 0 {
-		di as error "WARNING: Probabilities do not add up to 1. Relative sizes will be used."
-	}
-	
-	* Check that there are the same number of groups and probabilities.
-	if `"`labels'"' != "" | `"`strings'"' != "" {
 		cap assert `num_groups' == `counter' - 1
 		if _rc != 0 {
 			di as error "Must specify the same number of groups and probabilities."
 			exit 198
 		}
 	}
-	else {
-		local num_groups = `counter' - 1
+	
+	* Check that strings and values are not both specified.
+	cap assert `"`strings'"' == "" | `"`values'"' == ""
+	if _rc != 0 {
+		di as error "Cannot specify both strings and values."
+		exit 198
 	}
-	
-	* Scale probabilities to integers.
-	local min = min(`new_probs')
-	while mod(`min', 1) != 0 {
-		local new_probs = ""
-		forvalues i = 1/`num_groups' {
-			local prob`i' = `prob`i'' * (1/`min')
-			local new_probs "`new_probs', `prob`i''"
-		}
-		local new_probs = substr("`new_probs'", 3, strlen("`new_probs'") - 2)
-		local min = min(`new_probs')
-	}
-	
-	local sum = subinstr("`new_probs'", ",", " +", .)
-	local total = `sum'
-	
 	* Check that values and countfrom are not both specified.
 	cap assert `"`values'"' == "" | `"`countfrom'"' == ""
 	if _rc != 0 {
@@ -109,7 +122,6 @@ program define randomize, rclass
 			di as error "Cannot specify different numbers of probabilities and values."
 			exit 198
 		}
-		
 	}
 	
 	* Fill in values if it is missing.
@@ -202,7 +214,7 @@ program define randomize, rclass
 		bysort `block': egen clusters = sum(`temp')
 		drop `temp'
 		
-		cap assert clusters >= `sum'
+		cap assert clusters >= `total'
 		if _rc != 0 & `"`overrule'"' == "" {
 			di as error "The stratification blocks are too small to randomize all treatments. Adjust blocks or specify overrule WITH CAUTION."
 			exit 459
@@ -239,19 +251,14 @@ program define randomize, rclass
 
 	* Combine treatments together based on probabilities.
 	qui gen `generate' = .
-	local counter = 1
-	foreach p in `new_probs' {
-		local value: word `counter' of `values'
-		qui replace `generate' = `value' if `temp2' <= `p'
-		qui replace `temp2' = . if `temp2' <= `p'
-		qui replace `temp2' = `temp2' - `p'
-		
-		local counter = `++counter'
+	forvalues i = 1/`num_groups' {
+		local value: word `i' of `values'
+		qui replace `generate' = `value' if `temp2' <= `prob`i''
+		qui replace `temp2' = . if `temp2' <= `prob`i''
+		qui replace `temp2' = `temp2' - `prob`i''
 	}
 	
-
 	* Convert to string values if string() is specified.
-
 	if `"`strings'"' != "" {
 		qui rename `generate' `generate'_old
 		qui gen `generate' = ""
@@ -262,7 +269,6 @@ program define randomize, rclass
 		}
 		qui drop `generate'_old
 	}
-	
 
 	* Label values of treatment variable.
 	else if `"`labels'"' != "" {
@@ -281,7 +287,7 @@ program define randomize, rclass
 	qui merge 1:m `cluster' using `whole', nogen
 	sort `roworder'
 	order `colorder'
-	
+
 	* Update treatment variable to missing if outside of if/in.
 	if `"`if'"' != "" {
 		cap replace `generate' = . if !(`if')
@@ -339,7 +345,7 @@ program define randomize, rclass
 		* Estimate differences between groups.
 		local r = 1
 		foreach v of varlist `balance' {
-			
+
 			qui areg `v' i.`generate', absorb(`block') cluster(`cluster')
 			
 			local c = 1
@@ -439,7 +445,6 @@ program define randomize, rclass
 	}
 end
 
-* Program to randomly assign treatment statuses to each group.
 program define order_treatments
 
 	/* Define 2 arguements.
