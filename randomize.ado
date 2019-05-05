@@ -234,20 +234,21 @@ program define randomize, rclass
 	if `"`seed'"' == "" {
 		local seed = runiformint(10000, 99999)
 	}
+	local seed2 = `seed' + 1
+	local seed3 = `seed' + 2
 	
 	tempvar rand1 rand2
 	set seed `seed'
 	gen `rand1' = runiform()
-	local seed2 = `seed' + 1
 	set seed `seed2'
 	gen `rand2' = runiform()
 	
 	* Sort within blocks.
-	tempvar temp1 temp2 temp3 lastpart
+	tempvar temp1 temp2
 	qui gen `temp1' = .
 	qui bysort `block' (`rand1'): replace `temp1' = mod(_n, `total') + 1
 	
-	qui order_treatments `total' `block' `++seed' `temp1' `temp2'
+	qui order_treatments `block' `temp1' `temp2' `total' `seed3'
 
 	* Combine treatments together based on probabilities.
 	qui gen `generate' = .
@@ -445,66 +446,33 @@ program define randomize, rclass
 	}
 end
 
+* Program to randomly assign treatment statuses to each group.
 program define order_treatments
 
-	/* Define 2 arguements.
-		- The total number of groups.
-		- The randomization variable.*/
-	args total block seed oldvar newvar
+	* Define arguements.
+	args block oldvar newvar levels seed
+
+	* Save current data as a tempfile.
+	tempfile randdata
+	save `randdata'
+
+	* Collapse data by the block variable.
+	collapse (firstnm) `oldvar', by(`block')
 	
-	* Calculate the total possible permutations.
-	local permutations =  exp(lnfactorial(`total'))
+	* Expand the data to the number of treatment statuses.
+	expand `levels'
+	bysort `block': replace `oldvar' = _n
 	
-	* Generate a random number.
+	* Generate random variable and sort.
 	set seed `seed'
-	tempvar random
-	gen `random' = runiformint(1, `permutations')
-	bysort `block': replace `random' = `random'[1]
+	tempvar rand
+	gen `rand' = runiform()
+	by `block' (`rand'): gen `newvar' = _n
 	
-	/* Generate variables for all levels of randomization groups and for
-	these levels ordered. */
-	tempvar levels
-	gen `levels' = ""
-	forvalues i = 1/`total' {
-		replace `levels' = `levels' + " `i'"
-	}
-	tempvar order
-	gen `order' = ""
-	
-	/* Loop through number of remaining groups (in the same way as a factorial).
-	In each stage, update order with the next group in order. */
-	forvalues var = `total'(-1)1 {
-	
-		/* Select the next number in levels by dividing the random number into
-		equally sized groups. */
-		tempvar quadrant next
-		gen `quadrant' = ceil(`random' * `var'/`permutations')
-		gen `next' = word(`levels', `quadrant')
-		replace `order' = `order' + " " + `next'
-		
-		* Remove selected groups from levels so that they are not selected twice.
-		replace `levels' = subinstr(`levels', `next', "", .)
-		
-		/* Update randomization variable and number of permutations for the next round.
-		Effectively, we are "zooming in" on the portion of the random number. */
-		replace `random' = mod(`random', (`permutations'/`var'))
-		replace `random' = `permutations'/`var' if `random' == 0
-		local permutations = `permutations'/`var'
-		
-		* Drop temporary variables so they can be redifined in the next iteration.
-		drop `quadrant' `next'
-		
-	}
-	
-	* Generate a new variable with the ordered treatments.
-		gen `newvar' = .
-		forvalues i = 1/`total' {
-			tempvar temp
-			gen `temp' = word(`order', `i')
-			destring `temp', replace
-			replace `newvar' = `i' if `oldvar' == `temp'
-			
-			drop `temp'
-		}
-	
+	* Merge with full randomization data and update statuses.
+	tempvar mergevar
+	merge 1:m `block' `oldvar' using `randdata', gen(`mergevar')
+	assert `mergevar' != 2
+	keep if `mergevar' == 3
+
 end
