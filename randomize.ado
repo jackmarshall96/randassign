@@ -71,19 +71,25 @@ program define randomize, rclass
 	* Parse group names.
 	cap assert `"`labels'"' == "" | `"`strings'"' == ""
 	if _rc != 0 {
-		di as error "Cannot specify both labels and strings."
+		di as error "cannot specify both {bf:labels()} and {bf:strings}"
 		exit 198
 	}
 	
-	if `"`strings'"' != "" {
-		local labels = `"`strings'"'
+	* Prepare the original labels, before removing commas.
+	if `"`labels'"' != "" {
+		local labels_orig = `"`labels'"'
 	}
 	
-	if `"`labels'"' != "" {
-		local remaining = `"`labels'"'
+	if `"`strings'"' != "" {
+		local labels_orig = `"`strings'"'
+	}
+	local labels = ""
+	if `"`labels_orig'"' != "" {
+		local remaining = `"`labels_orig'"'
 		local counter = 1
 		while strlen(`"`remaining'"') > 0 {
 			gettoken label`counter' remaining: remaining, parse(",")
+			local labels = `"`labels' "`label`counter''""'
 			if substr(`"`remaining'"', 1, 1) == "," {
 				local remaining = substr(`"`remaining'"', 2, strlen(`"`remaining'"') - 1)
 			}
@@ -91,7 +97,7 @@ program define randomize, rclass
 		}
 		cap assert `num_groups' == `counter' - 1
 		if _rc != 0 {
-			di as error "Must specify the same number of groups and probabilities."
+			di as error "must specify the same number of groups and probabilities"
 			exit 198
 		}
 	}
@@ -99,13 +105,13 @@ program define randomize, rclass
 	* Check that strings and values are not both specified.
 	cap assert `"`strings'"' == "" | `"`values'"' == ""
 	if _rc != 0 {
-		di as error "Cannot specify both strings and values."
+		di as error "cannot specify both {bf:strings()} and {bf:values()}"
 		exit 198
 	}
 	* Check that values and countfrom are not both specified.
 	cap assert `"`values'"' == "" | `"`countfrom'"' == ""
 	if _rc != 0 {
-		di as error "Cannot specify both values and countfrom."
+		di as error "cannot specify both {bf:values()} and {bf:countfrom()}"
 		exit 198
 	}
 	
@@ -119,7 +125,7 @@ program define randomize, rclass
 		local num_values: word count `values'
 		cap assert `num_values' == `num_groups'
 		if _rc != 0 {
-			di as error "Cannot specify different numbers of probabilities and values."
+			di as error "cannot specify different numbers of {bf:probabilities()} and {bf:values()}"
 			exit 198
 		}
 	}
@@ -135,7 +141,7 @@ program define randomize, rclass
 	* Cannot specify balcluster without cluster.
 	cap assert "`cluster'" != "" | "`balcluster'" == ""
 	if _rc != 0 {
-		di as error "Cannot specify balcluster without cluster."
+		di as error "cannot specify {bf:balcluster()} without {bf:cluster()}"
 		exit 198
 	}
 	
@@ -146,7 +152,7 @@ program define randomize, rclass
 			local word: word `i' of `balcluster'
 			cap assert strpos(" `balindiv' ", " `word' ") == 0
 			if _rc != 0 {
-				di as error "Cannot have the same variable in balcluster and balindiv."
+				di as error "cannot have the same variable in {bf:balcluster()} and {bf:balindiv()}"
 				exit 198
 			}
 		}
@@ -163,7 +169,6 @@ program define randomize, rclass
 	qui gen `roworder' = _n
 	qui ds
 	local colorder = "`r(varlist)'"
-	
 	
 	/* If no clustervar is specified, cluster is defined as one cluster for each individual, which
 	is equivalent to individual-level randomization. */
@@ -195,7 +200,7 @@ program define randomize, rclass
 	qui bysort `cluster': egen `test' = sd(`block')
 	cap assert `test' == 0 | `test' == .
 	if _rc != 0 {
-		di as error "Block variable must be constant within clusters."
+		di as error "{bf:block()} variable must be constant within levels of {bf:cluster()} variable"
 		exit 459
 	}
 	
@@ -205,7 +210,8 @@ program define randomize, rclass
 	}
 	
 	* Collapse the data to the cluster level.
-	collapse (first) `block' `balance', by(`cluster')
+	sort `roworder'
+	collapse (first) `block', by(`cluster')
 		
 	* Check that there are enough clusters per block.
 	preserve
@@ -216,7 +222,8 @@ program define randomize, rclass
 		
 		cap assert clusters >= `total'
 		if _rc != 0 & `"`overrule'"' == "" {
-			di as error "The stratification blocks are too small to randomize all treatments. Adjust blocks or specify overrule WITH CAUTION."
+			di as error "stratification blocks too small to randomize all treatments {p} adjust blocks or specify {bf:overrule} WITH CAUTION"
+			use `whole', clear
 			exit 459
 		}
 		else if `"`overrule'"' != "" {
@@ -225,30 +232,38 @@ program define randomize, rclass
 	restore
 	
 	
-	
 	/*************************************** 
 	Implement the randomization.
 	****************************************/
 	
-	* Set seed and generate random variables.
+	/* Set seed and generate random variables. To make sure we don't get duplicate
+	random numbers, we use three 13 digit random numbers for each randomization. */
 	if `"`seed'"' == "" {
 		local seed = runiformint(10000, 99999)
 	}
-	local seed2 = `seed' + 1
-	local seed3 = `seed' + 2
 	
-	tempvar rand1 rand2
-	set seed `seed'
-	gen `rand1' = runiform()
-	set seed `seed2'
-	gen `rand2' = runiform()
+	sort `cluster'
+	forvalues i = 1/3 {
+		local currentseed = `seed' + `i' - 1
+		set seed `currentseed'
+		tempvar rand`i'
+		gen double `rand`i'' = runiform()	
+	}
+	
+	qui duplicates report `block' `rand1' `rand2' `rand3'
+	cap assert `r(N)' == `r(unique_value)'
+	if _rc != 0 {
+		di as error "Not stable - please run again with another seed."
+		exit
+	}
 	
 	* Sort within blocks.
 	tempvar temp1 temp2
-	qui gen `temp1' = .
-	qui bysort `block' (`rand1'): replace `temp1' = mod(_n, `total') + 1
+	qui bysort `block' (`rand1' `rand2' `rand3'): gen `temp1' = mod(_n, `total') + 1
 	
-	qui order_treatments `block' `temp1' `temp2' `total' `seed3'
+	sort `cluster'
+	local order_seed = `seed' + 4
+	qui order_treatments `block' `temp1' `temp2' `total' `order_seed'
 
 	* Combine treatments together based on probabilities.
 	qui gen `generate' = .
@@ -259,20 +274,9 @@ program define randomize, rclass
 		qui replace `temp2' = `temp2' - `prob`i''
 	}
 	
-	* Convert to string values if string() is specified.
-	if `"`strings'"' != "" {
-		qui rename `generate' `generate'_old
-		qui gen `generate' = ""
-		local counter = 1
-		foreach i in `values' {
-			local str = `"`label`counter++''"'
-			qui replace `generate' = `"`str'"' if `generate'_old == `i'
-		}
-		qui drop `generate'_old
-	}
 
 	* Label values of treatment variable.
-	else if `"`labels'"' != "" {
+	if `"`labels'"' != "" {
 		local counter = 1
 		local tool replace
 		foreach i in `values' {
@@ -297,6 +301,7 @@ program define randomize, rclass
 		}
 	}
 	
+	
 	/***************************************
 	Balance checks.
 	****************************************/
@@ -310,15 +315,18 @@ program define randomize, rclass
 			tempvar `v'_mean
 			qui bysort `cluster': egen ``v'_mean' = mean(`v')
 			cap assert `v' == ``v'_mean'
-			if _rc != 0 & `specified_cluster' == 0 {
-				di as error "`v' is not consistent within cluster variable. If you want to include it, use balanceindividual."
+			if _rc != 0 {
+				di as error "`v' is not consistent within cluster variable {p} if you want to include it, use {bf:balanceindiv()}"
 				exit 459
 			}
 			
-			* Create a version with only 1 non-missing observation per cluster.
-			tempvar `v'_tag
-			qui gen ``v'_tag' = `v' if `tag'
-			local balcluster_tag `balcluster_tag' ``v'_tag'
+			* Otherwise, create a version with only 1 non-missing observation per cluster.
+			else {
+				tempvar `v'_tag
+				qui gen ``v'_tag' = `v' if `tag'
+				local balcluster_tag `balcluster_tag' ``v'_tag'
+				local balcluster_names `balcluter_names' `v'
+			}			
 		}
 	}
 	
@@ -328,7 +336,7 @@ program define randomize, rclass
 			qui bysort `cluster': egen ``v'_mean' = mean(`v')
 			cap assert `v' == ``v'_mean'
 			if _rc == 0 {
-				di as error "WARNING: `v' has the same levels within all clusters. Did you mean to include it in balancecluster?"
+				di as error "WARNING: `v' has the same levels within all clusters. {p} Did you mean to include it in {bf:balancecluster()}?"
 			}
 		}
 	}
@@ -348,7 +356,7 @@ program define randomize, rclass
 		foreach v of varlist `balance' {
 
 			qui areg `v' i.`generate', absorb(`block') cluster(`cluster')
-			
+
 			local c = 1
 			foreach i in `values' {
 				qui sum `v' if `generate' == `i'
@@ -378,9 +386,8 @@ program define randomize, rclass
 			}
 		}
 		matrix balance = estimates, pvals
-		local groupnames = subinstr("`groups'", ",", "", .)
 		matrix colnames balance = `labels' `colnames'
-		matrix rownames balance = `balindiv' `balcluster'
+		matrix rownames balance = `balindiv' `balcluster_names'
 		
 		* Calculate binomial probabilities.
 		matrix p_01 = J(`rows', `num_groups' - 1, .01)
@@ -415,6 +422,19 @@ program define randomize, rclass
 		local p_l_1 = round(`r(p_u)', .01)
 	}
 	
+	/* Convert to string values if string() is specified. We save this until
+	after the balance checks because the treatment status needs to be numeric
+	for those regressions. */
+	if `"`strings'"' != "" {
+		qui rename `generate' `generate'_old
+		qui gen `generate' = ""
+		local counter = 1
+		foreach i in `values' {
+			local str = `"`label`counter++''"'
+			qui replace `generate' = `"`str'"' if `generate'_old == `i'
+		}
+		qui drop `generate'_old
+	}
 
 	
 	/***************************************
@@ -424,7 +444,7 @@ program define randomize, rclass
 	di ""
 	di as result "Randomization results:"
 	di ""
-	di as result" - Variable `generate' generated:"
+	di as result" - Variable {bf:`generate'} generated:"
 	tab `generate'
 	di ""
 	di as result " - Base seed used for randomization : `seed'"
@@ -433,7 +453,7 @@ program define randomize, rclass
 		di as result " - Randomization balance:"
 		matrix list balance
 		di ""
-		di as result " - Binomial probabilities for k rejected null hypotheses:"
+		di as result " - Binomial probabilities for number of rejected null hypotheses:"
 		di as result "       Pr(k >= `num_l_1') at the 10% level: `p_l_1'"
 		di as result "       Pr(k >= `num_l_05') at the 5% level: `p_l_05'"
 		di as result "       Pr(k >= `num_l_01') at the 1% level: `p_l_01'"
@@ -457,17 +477,29 @@ program define order_treatments
 	save `randdata'
 
 	* Collapse data by the block variable.
-	collapse (firstnm) `oldvar', by(`block')
+	keep `block' `oldvar'
+	duplicates drop `block', force
 	
 	* Expand the data to the number of treatment statuses.
 	expand `levels'
 	bysort `block': replace `oldvar' = _n
 	
-	* Generate random variable and sort.
-	set seed `seed'
-	tempvar rand
-	gen `rand' = runiform()
-	by `block' (`rand'): gen `newvar' = _n
+	* Generate random variables and sort.
+	forvalues i = 1/3 {
+		local currentseed = `seed' + `i' - 1
+		set seed `currentseed'
+		tempvar rand`i'
+		gen double `rand`i'' = runiform()
+	}
+	
+	qui duplicates report `block' `rand1' `rand2' `rand3'
+	cap assert `r(N)' == `r(unique_value)'
+	if _rc != 0 {
+		di as error "Not stable - please run again with another seed."
+		exit
+	}
+	
+	bysort `block' (`rand1' `rand2' `rand3'): gen `newvar' = _n
 	
 	* Merge with full randomization data and update statuses.
 	tempvar mergevar
