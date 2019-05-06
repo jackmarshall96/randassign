@@ -325,7 +325,7 @@ program define randomize, rclass
 				tempvar `v'_tag
 				qui gen ``v'_tag' = `v' if `tag'
 				local balcluster_tag `balcluster_tag' ``v'_tag'
-				local balcluster_names `balcluter_names' `v'
+				local balcluster_names `balcluster_names' `v'
 			}			
 		}
 	}
