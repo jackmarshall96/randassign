@@ -142,7 +142,7 @@ Note that re-randomizing is generally not a best practice, so these options shou
 Load the data. Extract from 1988 U.S. National Longitudinal Study of Young Women.
 {phang}{cmd: sysuse nlsw88, clear}{p_end}
 
-Randomize women into treatment or control, stratifying on college graduation. Check balance on age, race, and marital status.
+Randomize the sample into treatment or control, stratifying on college graduation. Check balance on age, race, and marital status.
 {phang}{cmd: randomize, gen(treatment) prob(.25 .75) labels(Control, Treatment) block(collgrad) balindiv(age race married)}{p_end}
 
 Randomize treated women to receive various incentives.
