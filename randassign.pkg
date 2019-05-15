@@ -1,4 +1,4 @@
 v 3
-d randomize - Command to run randomizations and check baseline balance. Automatically handles clustering and block stratification.
+d randassign - Command to run randomizations and check baseline balance. Automatically handles clustering and block stratification.
 f randassign.ado
 f randassign.sthlp
