@@ -1,4 +1,4 @@
-program define randomize, rclass
+program define randassign, rclass
 		
 	* Main steps:
 		* Parse syntax.
